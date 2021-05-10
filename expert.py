@@ -40,13 +40,15 @@ class Rules(KnowledgeEngine):
 
     @DefFacts()
     def answers(self):
-
+        '''
+        Определение основных фактов
+        '''
         for question_number in questions:
             yield Question(question=questions[question_number]['question'], correct_answer=questions[question_number]['correct_answer'])
         for key in topics:
             yield Topic(topic_number=key, questions_list=topics[key]['questions'])
 
-
+    #Начало работы
     @Rule()
     def start(self):
         print('Начнем задавать вопросы')
@@ -56,7 +58,7 @@ class Rules(KnowledgeEngine):
         
         self.declare(Action('select-topic'))
         
-
+    #Выбор темы
     @Rule(AS.f << Action('select-topic'))
     def select_topic(self, f):
         self.retract(f)
@@ -65,11 +67,10 @@ class Rules(KnowledgeEngine):
         self.declare(CurrentTopic(current_topic=topic_number))
         self.declare(Action('select-a-question'))
 
-
+    #Выбор вопроса
     @Rule(AS.f << Action('select-a-question'),
             AS.tn << CurrentTopic(current_topic=MATCH.t),
             AS.topic << Topic(topic_number = MATCH.t),
-            
             )
     def ask_question(self, f, topic):
         self.retract(f)
@@ -90,6 +91,7 @@ class Rules(KnowledgeEngine):
         self.declare(StudentAnswer(answer))
         self.declare(Action('check-answer'))
 
+    #Ответ правильный
     @Rule(AS.f1 << Action('check-answer'),
             AS.f2 << ActualQuestion(MATCH.q),
             AS.f3 << StudentAnswer(MATCH.a),
@@ -104,24 +106,6 @@ class Rules(KnowledgeEngine):
         
         self.declare(Action('increase-correct-answer'))
         
-
-    @Rule(AS.f1 << Action('check-answer'),
-            AS.f2 << ActualQuestion(MATCH.q),
-            AS.f3 << StudentAnswer(MATCH.a),
-            NOT(Question(question = MATCH.q, correct_answer = MATCH.a)),
-            # TEST(lambda a, b: a != b)
-            AS.qc << QuestionCounter(question_count = MATCH.q_c)
-            )
-    def incorrect_answer(self, f1, f2, f3, qc, q_c):
-        self.retract(f1)
-        self.retract(f2)
-        self.retract(f3)
-        
-        
-        print('ответ не верный')
-        self.modify(qc, question_count = q_c + 1)
-        self.declare(Action('select-a-question'))
-    
     @Rule(AS.f << Action('increase-correct-answer'),
             AS.c << CorrectAnswersCounter(count = MATCH.counter),
             AS.ct << CorrectAnswersInTopic(ans_count = MATCH.ans_counter),
@@ -133,8 +117,25 @@ class Rules(KnowledgeEngine):
         self.modify(qc, question_count = q + 1)
         self.modify(ct, ans_count = ans_counter + 1)
         self.modify(c, count = counter + 1)
-       
 
+    #Ответ не правильный
+    @Rule(AS.f1 << Action('check-answer'),
+            AS.f2 << ActualQuestion(MATCH.q),
+            AS.f3 << StudentAnswer(MATCH.a),
+            NOT(Question(question = MATCH.q, correct_answer = MATCH.a)),
+            AS.qc << QuestionCounter(question_count = MATCH.q_c)
+            )
+    def incorrect_answer(self, f1, f2, f3, qc, q_c):
+        self.retract(f1)
+        self.retract(f2)
+        self.retract(f3)
+        
+        print('ответ не верный')
+        self.modify(qc, question_count = q_c + 1)
+        self.declare(Action('select-a-question'))
+    
+    
+    #Если в текущей теме два правильных ответа, выбор новой темы, иначе сразу же выбор нового вопроса
     @Rule(NOT(CorrectAnswersInTopic(ans_count = L(2))))
     def set_new_question(self):
         print('new question')
@@ -148,6 +149,7 @@ class Rules(KnowledgeEngine):
         print('new topic')
         self.declare(Action('select-topic'))
 
+    #Подсчет оценки и завершение работы
     @Rule(QuestionCounter(question_count = L(10)),
             AS.ca << CorrectAnswersCounter(count = MATCH.cac),salience = 1)
     def finish_quiz(self, cac):
